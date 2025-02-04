@@ -112,3 +112,99 @@ export const logoutUser = async (req, res) => {
     })
   }
 }
+
+export const sendOtp = async (req, res) => {
+  try {
+    const { userId } = req.body;
+    const user = await userModel.findById(userId);
+    if (!user) {
+      return res.status(400).json({
+        success: false,
+        message: "User with this id does dot exists"
+      })
+    }
+    if (user.isAcountVerfied) {
+      return res.status(400).json({
+        success: false,
+        message: "User is Already verfied"
+      })
+    }
+    const generatedOTP = String(Math.floor(100000 + Math.random() * 900000));
+    user.verifyOtp = generatedOTP;
+    user.verifyOtpExpiresAt = Date.now() + 24 * 60 * 60 * 1000;
+    await user.save();
+    const mailOptions = {
+      from: process.env.EMAIL,
+      to: user.email,
+      subject: 'Acount Verification OTP',
+      text: `Your OTP is ${generatedOTP} ,\nEnter this OTP to verify your Acount\nThank you!`
+    }
+    try {
+      await transporter.sendMail(mailOptions);
+    } catch (error) {
+      return res.status(404).json({
+        success: false,
+        message: error.message
+      })
+    }
+    return res.status(200).json({
+      success: true,
+      message: "OTP successfully sent to your email id"
+    })
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      error: error
+    })
+  }
+}
+
+export const verifyOtp = async (req, res) => {
+  try {
+    const { userId, otp } = req.body;
+    const user = await userModel.findById(userId);
+    if (!userId || !otp) {
+      return res.status(400).json({
+        success: false,
+        message: "Missing details"
+      })
+    }
+    if (!user) {
+      return res.status(400).json({
+        success: false,
+        message: "User with this id does dot exists"
+      })
+    }
+    if (user.isAcountVerfied) {
+      return res.status(400).json({
+        success: false,
+        message: "User is Already verfied"
+      })
+    }
+    if (user.verifyOtp === '' || user.verifyOtp !== otp) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid OTP"
+      })
+    }
+    if (user.verifyOtpExpiresAt < Date.now()) {
+      return res.status(400).json({
+        success: false,
+        message: "OTP has been expired generate a new one"
+      })
+    }
+    user.isAcountVerfied = true;
+    user.verifyOtpExpiresAt = 0;
+    user.verifyOtp = '';
+    await user.save();
+    return res.status(200).json({
+      success: true,
+      message: "Acount verified successfully"
+    })
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      error: error
+    })
+  }
+}
